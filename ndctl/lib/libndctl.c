@@ -1725,7 +1725,7 @@ static int populate_dimm_attributes(struct ndctl_dimm *dimm,
 
 	sprintf(path, "%s/%s/dsm_mask", dimm_base, bus_prefix);
 	if (sysfs_read_attr(ctx, path, buf) == 0)
-		dimm->nfit_dsm_mask = strtoul(buf, NULL, 0);
+		dimm->dsm_mask = strtoul(buf, NULL, 0);
 
 	sprintf(path, "%s/%s/format", dimm_base, bus_prefix);
 	if (sysfs_read_attr(ctx, path, buf) == 0)
@@ -1870,7 +1870,7 @@ static void *add_dimm(void *parent, int id, const char *dimm_base)
 	dimm->manufacturing_date = -1;
 	dimm->manufacturing_location = -1;
 	dimm->cmd_family = -1;
-	dimm->nfit_dsm_mask = ULONG_MAX;
+	dimm->dsm_mask = ULONG_MAX;
 	for (i = 0; i < formats; i++)
 		dimm->format[i] = -1;
 

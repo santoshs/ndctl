@@ -68,7 +68,7 @@ struct ndctl_dimm {
 	unsigned char manufacturing_location;
 	unsigned long cmd_family;
 	unsigned long cmd_mask;
-	unsigned long nfit_dsm_mask;
+	unsigned long dsm_mask;
 	long long dirty_shutdown;
 	enum ndctl_fwa_state fwa_state;
 	enum ndctl_fwa_result fwa_result;
@@ -105,9 +105,9 @@ enum dsm_support {
 
 static inline enum dsm_support test_dimm_dsm(struct ndctl_dimm *dimm, int fn)
 {
-	if (dimm->nfit_dsm_mask == ULONG_MAX) {
+	if (dimm->dsm_mask == ULONG_MAX) {
 		return DIMM_DSM_UNKNOWN;
-	} else if (dimm->nfit_dsm_mask & (1 << fn))
+	} else if (dimm->dsm_mask & (1 << fn))
 		return DIMM_DSM_SUPPORTED;
 	return DIMM_DSM_UNSUPPORTED;
 }

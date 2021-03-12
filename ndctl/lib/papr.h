@@ -12,4 +12,13 @@ struct nd_pkg_papr {
 	struct nd_pkg_pdsm pdsm;
 };
 
+#define ND_PAPR_SMART_INJECT_MTEMP             (1 << 0)
+#define ND_PAPR_SMART_INJECT_SPARES            (1 << 1)
+#define ND_PAPR_SMART_INJECT_FATAL             (1 << 2)
+#define ND_PAPR_SMART_INJECT_SHUTDOWN          (1 << 3)
+
+#define ND_PAPR_HEALTH_SPARE_TRIP               (1 << 0)
+#define ND_PAPR_HEALTH_TEMP_TRIP                (1 << 1)
+#define ND_PAPR_HEALTH_CTEMP_TRIP               (1 << 2)
+
 #endif /* __PAPR_H__ */

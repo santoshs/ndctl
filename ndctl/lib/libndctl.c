@@ -861,6 +861,7 @@ static void *add_bus(void *parent, int id, const char *ctl_base)
 	struct ndctl_ctx *ctx = parent;
 	struct ndctl_bus *bus, *bus_dup;
 	char *path = calloc(1, strlen(ctl_base) + 100);
+	char *bus_name;
 
 	if (!path)
 		return NULL;
@@ -890,15 +891,19 @@ static void *add_bus(void *parent, int id, const char *ctl_base)
 	} else {
 		bus->has_nfit = 1;
 		bus->revision = strtoul(buf, NULL, 0);
+		bus_name = "nfit";
+		bus->ops = nfit_bus_ops;
 	}
 
 	sprintf(path, "%s/device/of_node/compatible", ctl_base);
 	if (sysfs_read_attr(ctx, path, buf) < 0)
 		bus->has_of_node = 0;
-	else
+	else {
 		bus->has_of_node = 1;
+		bus_name = "papr";
+	}
 
-	sprintf(path, "%s/device/nfit/dsm_mask", ctl_base);
+	sprintf(path, "%s/device/%s/dsm_mask", ctl_base, bus_name);
 	if (sysfs_read_attr(ctx, path, buf) < 0)
 		bus->nfit_dsm_mask = 0;
 	else
@@ -917,7 +922,7 @@ static void *add_bus(void *parent, int id, const char *ctl_base)
 	if (!bus->wait_probe_path)
 		goto err_read;
 
-	sprintf(path, "%s/device/nfit/scrub", ctl_base);
+	sprintf(path, "%s/device/%s/scrub", ctl_base, bus_name);
 	bus->scrub_path = strdup(path);
 	if (!bus->scrub_path)
 		goto err_read;

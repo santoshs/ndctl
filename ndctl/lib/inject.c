@@ -6,19 +6,15 @@
 #include <util/size.h>
 #include <ndctl/libndctl.h>
 #include <ccan/list/list.h>
-#include <ndctl/libndctl-nfit.h>
 #include <ccan/short_types/short_types.h>
 #include "private.h"
 
 NDCTL_EXPORT int ndctl_bus_has_error_injection(struct ndctl_bus *bus)
 {
-	/* Currently, only nfit buses have error injection */
-	if (!bus || !ndctl_bus_has_nfit(bus))
+	if (!bus)
 		return 0;
 
-	if (ndctl_bus_is_nfit_cmd_supported(bus, NFIT_CMD_ARS_INJECT_SET) &&
-		ndctl_bus_is_nfit_cmd_supported(bus, NFIT_CMD_ARS_INJECT_GET) &&
-		ndctl_bus_is_nfit_cmd_supported(bus, NFIT_CMD_ARS_INJECT_CLEAR))
+	if (bus->ops->err_inj_supported(bus))
 		return 1;
 
 	return 0;
@@ -151,7 +147,7 @@ static int ndctl_namespace_inject_one_error(struct ndctl_namespace *ndns,
 			length = clear_unit;
 	}
 
-	cmd = ndctl_bus_cmd_new_err_inj(bus);
+	cmd = bus->ops->new_err_inj(bus);
 	if (!cmd)
 		return -ENOMEM;
 
@@ -184,8 +180,6 @@ NDCTL_EXPORT int ndctl_namespace_inject_error2(struct ndctl_namespace *ndns,
 	int rc = -EINVAL;
 
 	if (!ndctl_bus_has_error_injection(bus))
-		return -EOPNOTSUPP;
-	if (!ndctl_bus_has_nfit(bus))
 		return -EOPNOTSUPP;
 
 	for (i = 0; i < count; i++) {
@@ -231,7 +225,7 @@ static int ndctl_namespace_uninject_one_error(struct ndctl_namespace *ndns,
 			length = clear_unit;
 	}
 
-	cmd = ndctl_bus_cmd_new_err_inj_clr(bus);
+	cmd = bus->ops->new_err_inj_clr(bus);
 	if (!cmd)
 		return -ENOMEM;
 
@@ -262,8 +256,6 @@ NDCTL_EXPORT int ndctl_namespace_uninject_error2(struct ndctl_namespace *ndns,
 	int rc = -EINVAL;
 
 	if (!ndctl_bus_has_error_injection(bus))
-		return -EOPNOTSUPP;
-	if (!ndctl_bus_has_nfit(bus))
 		return -EOPNOTSUPP;
 
 	for (i = 0; i < count; i++) {
@@ -445,51 +437,49 @@ NDCTL_EXPORT int ndctl_namespace_injection_status(struct ndctl_namespace *ndns)
 	if (!ndctl_bus_has_error_injection(bus))
 		return -EOPNOTSUPP;
 
-	if (ndctl_bus_has_nfit(bus)) {
-		rc = ndctl_namespace_get_injection_bounds(ndns, &ns_offset,
-			&ns_size);
-		if (rc)
-			return rc;
+	rc = ndctl_namespace_get_injection_bounds(ndns, &ns_offset,
+						  &ns_size);
+	if (rc)
+		return rc;
 
-		cmd = ndctl_bus_cmd_new_ars_cap(bus, ns_offset, ns_size);
-		if (!cmd) {
-			err(ctx, "%s: failed to create cmd\n",
-				ndctl_namespace_get_devname(ndns));
-			return -ENOTTY;
-		}
-		rc = ndctl_cmd_submit(cmd);
-		if (rc < 0) {
-			dbg(ctx, "Error submitting ars_cap: %d\n", rc);
-			goto out;
-		}
-		buf_size = ndctl_cmd_ars_cap_get_size(cmd);
-		if (buf_size == 0) {
-			dbg(ctx, "Got an invalid max_ars_out from ars_cap\n");
-			rc = -EINVAL;
-			goto out;
-		}
-		ndctl_cmd_unref(cmd);
+	cmd = ndctl_bus_cmd_new_ars_cap(bus, ns_offset, ns_size);
+	if (!cmd) {
+		err(ctx, "%s: failed to create cmd\n",
+		    ndctl_namespace_get_devname(ndns));
+		return -ENOTTY;
+	}
+	rc = ndctl_cmd_submit(cmd);
+	if (rc < 0) {
+		dbg(ctx, "Error submitting ars_cap: %d\n", rc);
+		goto out;
+	}
+	buf_size = ndctl_cmd_ars_cap_get_size(cmd);
+	if (buf_size == 0) {
+		dbg(ctx, "Got an invalid max_ars_out from ars_cap\n");
+		rc = -EINVAL;
+		goto out;
+	}
+	ndctl_cmd_unref(cmd);
 
-		cmd = ndctl_bus_cmd_new_err_inj_stat(bus, buf_size);
-		if (!cmd)
-			return -ENOMEM;
+	cmd = bus->ops->new_err_inj_stat(bus, buf_size);
+	if (!cmd)
+		return -ENOMEM;
 
-		pkg = (struct nd_cmd_pkg *)&cmd->cmd_buf[0];
-		err_inj_stat =
-			(struct nd_cmd_ars_err_inj_stat *)&pkg->nd_payload[0];
+	pkg = (struct nd_cmd_pkg *)&cmd->cmd_buf[0];
+	err_inj_stat =
+		(struct nd_cmd_ars_err_inj_stat *)&pkg->nd_payload[0];
 
-		rc = ndctl_cmd_submit(cmd);
-		if (rc < 0) {
-			dbg(ctx, "Error submitting command: %d\n", rc);
-			goto out;
-		}
-		rc = injection_status_to_bb(ndns, err_inj_stat,
-			ns_offset, ns_size);
-		if (rc) {
-			dbg(ctx, "Error converting status to badblocks: %d\n",
-				rc);
-			goto out;
-		}
+	rc = ndctl_cmd_submit(cmd);
+	if (rc < 0) {
+		dbg(ctx, "Error submitting command: %d\n", rc);
+		goto out;
+	}
+	rc = injection_status_to_bb(ndns, err_inj_stat,
+				    ns_offset, ns_size);
+	if (rc) {
+		dbg(ctx, "Error converting status to badblocks: %d\n",
+		    rc);
+		goto out;
 	}
 
  out:

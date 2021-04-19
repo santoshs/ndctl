@@ -5,6 +5,19 @@
 #include "private.h"
 #include <ndctl/libndctl-nfit.h>
 
+static int nfit_is_errinj_supported(struct ndctl_bus *bus)
+{
+	if (!ndctl_bus_has_nfit(bus))
+		return 0;
+
+	if (ndctl_bus_is_nfit_cmd_supported(bus, NFIT_CMD_ARS_INJECT_SET) &&
+	    ndctl_bus_is_nfit_cmd_supported(bus, NFIT_CMD_ARS_INJECT_GET) &&
+	    ndctl_bus_is_nfit_cmd_supported(bus, NFIT_CMD_ARS_INJECT_CLEAR))
+		return 1;
+
+	return 0;
+}
+
 static u32 bus_get_firmware_status(struct ndctl_cmd *cmd)
 {
 	struct nd_cmd_bus *cmd_bus = cmd->cmd_bus;
@@ -234,3 +247,10 @@ struct ndctl_cmd *ndctl_bus_cmd_new_err_inj_stat(struct ndctl_bus *bus,
 
 	return cmd;
 }
+
+struct ndctl_bus_ops *const nfit_bus_ops = &(struct ndctl_bus_ops) {
+	.new_err_inj = ndctl_bus_cmd_new_err_inj,
+	.new_err_inj_clr = ndctl_bus_cmd_new_err_inj_clr,
+	.new_err_inj_stat = ndctl_bus_cmd_new_err_inj_stat,
+	.err_inj_supported = nfit_is_errinj_supported,
+};

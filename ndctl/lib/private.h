@@ -157,6 +157,7 @@ struct ndctl_bus {
 	struct list_head dimms;
 	struct list_head regions;
 	struct list_node list;
+	struct ndctl_bus_ops *ops;
 	int dimms_init;
 	int regions_init;
 	int has_nfit;
@@ -369,6 +370,19 @@ static inline int check_kmod(struct kmod_ctx *kmod_ctx)
 {
 	return kmod_ctx ? 0 : -ENXIO;
 }
+
+int ndctl_bus_nfit_translate_spa(struct ndctl_bus *bus, unsigned long long addr,
+		unsigned int *handle, unsigned long long *dpa);
+
+struct ndctl_bus_ops {
+	int (*err_inj_supported)(struct ndctl_bus *bus);
+	struct ndctl_cmd *(*new_err_inj)(struct ndctl_bus *bus);
+	struct ndctl_cmd *(*new_err_inj_clr)(struct ndctl_bus *bus);
+	struct ndctl_cmd *(*new_err_inj_stat)(struct ndctl_bus *bus,
+					      u32 buf_len);
+};
+
+extern struct ndctl_bus_ops * const nfit_bus_ops;
 
 struct ndctl_cmd *ndctl_bus_cmd_new_err_inj(struct ndctl_bus *bus);
 struct ndctl_cmd *ndctl_bus_cmd_new_err_inj_clr(struct ndctl_bus *bus);

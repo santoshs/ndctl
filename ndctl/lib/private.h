@@ -383,6 +383,7 @@ struct ndctl_bus_ops {
 };
 
 extern struct ndctl_bus_ops * const nfit_bus_ops;
+extern struct ndctl_bus_ops * const papr_bus_ops;
 
 struct ndctl_cmd *ndctl_bus_cmd_new_err_inj(struct ndctl_bus *bus);
 struct ndctl_cmd *ndctl_bus_cmd_new_err_inj_clr(struct ndctl_bus *bus);

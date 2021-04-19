@@ -901,6 +901,7 @@ static void *add_bus(void *parent, int id, const char *ctl_base)
 	else {
 		bus->has_of_node = 1;
 		bus_name = "papr";
+		bus->ops = papr_bus_ops;
 	}
 
 	sprintf(path, "%s/device/%s/dsm_mask", ctl_base, bus_name);

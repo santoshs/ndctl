@@ -12,6 +12,7 @@
 #include <util/log.h>
 #include <ndctl.h>
 #include <ndctl/libndctl.h>
+#include <ndctl/libndctl-papr.h>
 #include <lib/private.h>
 #include "papr.h"
 
@@ -37,6 +38,33 @@
 
 /* return the pdsm command */
 #define to_pdsm_cmd(C) ((enum papr_pdsm)to_ndcmd(C)->nd_command)
+
+/**
+ * ndctl_bus_is_papr_cmd_supported - check if command is supported on @bus.
+ * @bus: ndctl_bus instance
+ * @cmd: papr command number (defined as PAPR_PDSM_XXX in papr-pdsm.h)
+ *
+ * Return 1: command is supported. Return 0: command is not supported.
+ *
+ */
+NDCTL_EXPORT int ndctl_bus_is_papr_cmd_supported(struct ndctl_bus *bus,
+						 int cmd)
+{
+	return !!(bus->nfit_dsm_mask & (1ULL << cmd));
+}
+
+static int papr_is_errinj_supported(struct ndctl_bus *bus)
+{
+	if (!ndctl_bus_is_papr_scm(bus))
+		return 0;
+
+	if (ndctl_bus_is_papr_cmd_supported(bus, PAPR_PDSM_INJECT_SET) &&
+	    ndctl_bus_is_papr_cmd_supported(bus, PAPR_PDSM_INJECT_CLEAR) &&
+	    ndctl_bus_is_papr_cmd_supported(bus, PAPR_PDSM_INJECT_GET))
+		return 1;
+
+	return 0;
+}
 
 static bool papr_cmd_is_supported(struct ndctl_dimm *dimm, int cmd)
 {
@@ -558,4 +586,110 @@ struct ndctl_dimm_ops * const papr_dimm_ops = &(struct ndctl_dimm_ops) {
 	.smart_threshold_set_ctrl_temperature
 		= papr_cmd_smart_threshold_set_ctrl_temperature,
 	.smart_threshold_set_spares = papr_cmd_smart_threshold_set_spares,
+};
+
+static u32 bus_get_firmware_status(struct ndctl_cmd *cmd)
+{
+	struct nd_cmd_bus *cmd_bus = cmd->cmd_bus;
+
+	switch (cmd_bus->gen.nd_command) {
+	case PAPR_PDSM_INJECT_SET:
+		return cmd_bus->err_inj.status;
+	case PAPR_PDSM_INJECT_CLEAR:
+		return cmd_bus->err_inj_clr.status;
+	case PAPR_PDSM_INJECT_GET:
+		return cmd_bus->err_inj_stat.status;
+	}
+
+	return -1U;
+}
+
+static struct ndctl_cmd *papr_bus_cmd_new_err_inj(struct ndctl_bus *bus)
+{
+	size_t size, cmd_length;
+	struct nd_cmd_pkg *pkg;
+	struct ndctl_cmd *cmd;
+
+	cmd_length = sizeof(struct nd_cmd_ars_err_inj);
+	size = sizeof(*cmd) + sizeof(*pkg) + cmd_length;
+	cmd = calloc(1, size);
+	if (!cmd)
+		return NULL;
+
+	cmd->bus = bus;
+	ndctl_cmd_ref(cmd);
+	cmd->type = ND_CMD_CALL;
+	cmd->get_firmware_status = bus_get_firmware_status;
+	cmd->size = size;
+	cmd->status = 1;
+	pkg = (struct nd_cmd_pkg *)&cmd->cmd_buf[0];
+	pkg->nd_command = PAPR_PDSM_INJECT_SET;
+	pkg->nd_size_in = offsetof(struct nd_cmd_ars_err_inj, status);
+	pkg->nd_size_out = cmd_length - pkg->nd_size_in;
+	pkg->nd_fw_size = pkg->nd_size_out;
+
+	return cmd;
+}
+
+static struct ndctl_cmd *papr_bus_cmd_new_err_inj_clr(struct ndctl_bus *bus)
+{
+	size_t size, cmd_length;
+	struct nd_cmd_pkg *pkg;
+	struct ndctl_cmd *cmd;
+
+	cmd_length = sizeof(struct nd_cmd_ars_err_inj_clr);
+	size = sizeof(*cmd) + sizeof(*pkg) + cmd_length;
+	cmd = calloc(1, size);
+	if (!cmd)
+		return NULL;
+
+	cmd->bus = bus;
+	ndctl_cmd_ref(cmd);
+	cmd->type = ND_CMD_CALL;
+	cmd->get_firmware_status = bus_get_firmware_status;
+	cmd->size = size;
+	cmd->status = 1;
+	pkg = (struct nd_cmd_pkg *)&cmd->cmd_buf[0];
+	pkg->nd_command = PAPR_PDSM_INJECT_CLEAR;
+	pkg->nd_size_in = offsetof(struct nd_cmd_ars_err_inj_clr, status);
+	pkg->nd_size_out = cmd_length - pkg->nd_size_in;
+	pkg->nd_fw_size = pkg->nd_size_out;
+
+	return cmd;
+}
+
+static struct ndctl_cmd *papr_bus_cmd_new_err_inj_stat(struct ndctl_bus *bus,
+						u32 buf_size)
+{
+	size_t size, cmd_length;
+	struct nd_cmd_pkg *pkg;
+	struct ndctl_cmd *cmd;
+
+
+	cmd_length = sizeof(struct nd_cmd_ars_err_inj_stat);
+	size = sizeof(*cmd) + sizeof(*pkg) + cmd_length + buf_size;
+	cmd = calloc(1, size);
+	if (!cmd)
+		return NULL;
+
+	cmd->bus = bus;
+	ndctl_cmd_ref(cmd);
+	cmd->type = ND_CMD_CALL;
+	cmd->get_firmware_status = bus_get_firmware_status;
+	cmd->size = size;
+	cmd->status = 1;
+	pkg = (struct nd_cmd_pkg *)&cmd->cmd_buf[0];
+	pkg->nd_command = PAPR_PDSM_INJECT_GET;
+	pkg->nd_size_in = 0;
+	pkg->nd_size_out = cmd_length + buf_size;
+	pkg->nd_fw_size = pkg->nd_size_out;
+
+	return cmd;
+}
+
+struct ndctl_bus_ops *const papr_bus_ops = &(struct ndctl_bus_ops) {
+	.new_err_inj = papr_bus_cmd_new_err_inj,
+	.new_err_inj_clr = papr_bus_cmd_new_err_inj_clr,
+	.new_err_inj_stat = papr_bus_cmd_new_err_inj_stat,
+	.err_inj_supported = papr_is_errinj_supported,
 };
